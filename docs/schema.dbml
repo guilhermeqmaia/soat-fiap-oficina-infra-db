@@ -1,0 +1,207 @@
+// Auto Repair Shop - Entity Relationship Diagram
+// Import this file at https://dbdiagram.io
+
+Project oficina_mecanica {
+  database_type: 'PostgreSQL'
+  Note: 'Sistema Integrado de Oficina Mecanica - Tech Challenge FIAP'
+}
+
+Enum Role {
+  ADMIN
+  ATENDENTE
+  MECANICO
+  ESTOQUISTA
+  CLIENTE
+}
+
+Enum StatusOrdemDeServico {
+  RECEBIDA
+  EM_DIAGNOSTICO
+  AGUARDANDO_APROVACAO
+  EM_EXECUCAO
+  FINALIZADA
+  ENTREGUE
+  CANCELADA
+}
+
+Enum StatusExecucaoItem {
+  PENDENTE
+  EM_EXECUCAO
+  CONCLUIDO
+}
+
+Enum TipoMovimentacaoEstoque {
+  ENTRADA
+  SAIDA
+  RESERVA
+  ESTORNO_RESERVA
+  BAIXA
+}
+
+Enum TipoNotificacao {
+  ORCAMENTO_PRONTO
+  OS_FINALIZADA
+  STATUS_OS_ALTERADO
+}
+
+Enum CanalNotificacao {
+  EMAIL
+}
+
+Enum StatusNotificacao {
+  PENDENTE
+  ENVIADA
+  FALHOU
+}
+
+Table usuario {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  nome varchar [not null]
+  email varchar [unique, not null]
+  senha_hash varchar [not null]
+  role Role [not null]
+  ativo boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table cliente {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  nome varchar [not null]
+  cpf_cnpj varchar [unique, not null, note: 'CPF or CNPJ, validated in domain']
+  email varchar
+  telefone varchar [not null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table veiculo {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  cliente_id uuid [not null, ref: > cliente.id]
+  placa varchar [unique, not null, note: 'Brazilian plate: old or Mercosul format']
+  marca varchar [not null]
+  modelo varchar [not null]
+  ano int [not null]
+  ativo boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table servico {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  nome varchar [not null]
+  descricao text
+  preco_base decimal [not null, note: 'Positive value']
+  tempo_estimado_horas float [not null, note: 'Estimated time in hours']
+  ativo boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table produto {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  nome varchar [not null]
+  descricao text
+  preco_unitario decimal [not null, note: 'Positive value']
+  quantidade_estoque int [not null]
+  quantidade_reservada int [not null, default: 0]
+  estoque_minimo int [not null]
+  ativo boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table movimentacao_estoque {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  produto_id uuid [not null, ref: > produto.id]
+  tipo TipoMovimentacaoEstoque [not null]
+  quantidade int [not null]
+  estoque_resultante int [not null]
+  ordem_de_servico_id uuid [ref: > ordem_de_servico.id]
+  motivo varchar
+  usuario_id uuid
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (produto_id, created_at)
+    ordem_de_servico_id
+  }
+}
+
+Table ordem_de_servico {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  numero varchar [unique, not null]
+  cliente_id uuid [not null, ref: > cliente.id]
+  veiculo_id uuid [not null, ref: > veiculo.id]
+  usuario_id uuid [ref: > usuario.id]
+  descricao_inicial varchar [not null]
+  diagnostico text
+  status StatusOrdemDeServico [not null, default: 'RECEBIDA']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table item_ordem_de_servico_servico {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  ordem_de_servico_id uuid [not null, ref: > ordem_de_servico.id]
+  servico_id uuid [not null, ref: > servico.id]
+  quantidade int [not null]
+  preco_unitario decimal [not null, note: 'Price at the time of OS creation']
+  status_execucao StatusExecucaoItem [not null, default: 'PENDENTE']
+  inicio_execucao timestamp
+  fim_execucao timestamp
+  horas_trabalhadas float
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (ordem_de_servico_id, servico_id) [unique]
+  }
+}
+
+Table item_ordem_de_servico_produto {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  item_ordem_de_servico_servico_id uuid [not null, ref: > item_ordem_de_servico_servico.id]
+  produto_id uuid [not null, ref: > produto.id]
+  quantidade int [not null]
+  preco_unitario decimal [not null, note: 'Price at the time of OS creation']
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (item_ordem_de_servico_servico_id, produto_id) [unique]
+  }
+}
+
+Table ordem_de_servico_audit_log {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  ordem_de_servico_id uuid [not null, ref: > ordem_de_servico.id]
+  acao varchar [not null]
+  status_anterior varchar
+  status_novo varchar
+  usuario_id uuid
+  metadata json
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (ordem_de_servico_id, created_at)
+  }
+}
+
+Table notificacao {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  cliente_id uuid [not null]
+  ordem_de_servico_id uuid
+  tipo TipoNotificacao [not null]
+  canal CanalNotificacao [not null]
+  destinatario varchar [not null]
+  assunto varchar [not null]
+  mensagem varchar [not null]
+  status StatusNotificacao [not null]
+  erro varchar
+  enviada_em timestamp
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    cliente_id
+    ordem_de_servico_id
+  }
+}
