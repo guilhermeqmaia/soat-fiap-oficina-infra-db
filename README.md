@@ -13,7 +13,9 @@ solução.
 | 4 | [soat-fiap-oficina-mecanica-app](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) | Aplicação NestJS + manifestos K8s + docs |
 
 > **Status:** scaffold — a implementação é a
-> [US-F3-04](docs/user-stories/f3-04-terraform-banco-gerenciado.md).
+> [US-F3-04](docs/user-stories/f3-04-terraform-banco-gerenciado.md);
+> documentação da escolha do banco e do modelo ER em
+> [US-F3-DOC-04](docs/user-stories/f3-doc-04-justificativa-banco-er.md).
 
 ## Por que PostgreSQL gerenciado (RDS)
 
@@ -21,9 +23,11 @@ solução.
   reescrita na aplicação.
 - ACID para as transações do domínio (ordens de serviço, reservas de estoque).
 - Multi-AZ com failover automático, backups e patches gerenciados pela AWS.
-- Justificativa formal e modelo ER: ver
-  [docs/schema.dbml](docs/schema.dbml) (importável no
-  [dbdiagram.io](https://dbdiagram.io)) e a US-F3-DOC-04 no repo principal.
+- **Justificativa formal** (comparativo com DynamoDB, MySQL, Postgres
+  auto-hospedado e Aurora), **diagrama ER**, relacionamentos, constraints e
+  índices: [docs/arquitetura/banco-de-dados.md](docs/arquitetura/banco-de-dados.md)
+  (US-F3-DOC-04). Fonte do modelo: [docs/schema.dbml](docs/schema.dbml)
+  (importável no [dbdiagram.io](https://dbdiagram.io)).
 
 ## Consumidores do banco
 
@@ -63,7 +67,8 @@ terraform fmt -check && terraform init -backend=false && terraform validate
 
 ## Documentação
 
-- [docs/user-stories/](docs/user-stories/) — US-F3-04
-- [docs/schema.dbml](docs/schema.dbml) — modelo ER completo do domínio
+- [docs/user-stories/](docs/user-stories/) — US-F3-04, US-F3-DOC-04
+- [docs/arquitetura/banco-de-dados.md](docs/arquitetura/banco-de-dados.md) — justificativa da escolha do banco, diagrama ER, relacionamentos, consistência e índices
+- [docs/schema.dbml](docs/schema.dbml) — modelo ER completo do domínio (fonte canônica do [diagrama](docs/arquitetura/er-diagram.png))
 - [docs/tech-challenges/fase-3-tech-challenge.pdf](docs/tech-challenges/fase-3-tech-challenge.pdf) — enunciado
 - [docs/qa-plans/](docs/qa-plans/) — planos de QA (gerados com a skill `/qa-plan`)
