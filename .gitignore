@@ -10,6 +10,9 @@
 *.tfvars
 !*.tfvars.example
 
+# Backend config real (bucket/tabela por conta) — mantem apenas o exemplo
+backend.hcl
+
 # Planos e logs
 *.tfplan
 crash.log

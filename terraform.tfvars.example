@@ -1,0 +1,23 @@
+# Banco Gerenciado (RDS): exemplo de variaveis.
+# Copie para terraform.tfvars (gitignored) e preencha com os outputs do
+# repo 2 (soat-fiap-oficina-infra-k8s — cluster/VPC) e do repo 1
+# (soat-fiap-oficina-auth-lambda — security group da Lambda).
+
+environment = "homolog" # ou "prod"
+
+# VPC e subnets privadas do cluster EKS
+vpc_id     = "vpc-0123456789abcdef0"
+subnet_ids = ["subnet-0aaa1111bbb22222c", "subnet-0ddd3333eee44444f"]
+
+# Security groups com acesso ao Postgres: nodes do EKS e a Lambda de auth.
+# Deixe [] e use allowed_cidr_blocks se ainda nao tiver os SGs.
+allowed_security_group_ids = ["sg-0123456789abcdef0", "sg-0fedcba9876543210"]
+# allowed_cidr_blocks      = ["10.0.0.0/16"] # CIDR da VPC (alternativa)
+
+# Opcionais (defaults em variables.tf)
+# aws_region              = "us-east-1"
+# instance_class          = "db.t3.micro"
+# allocated_storage       = 20
+# multi_az                = true
+# backup_retention_period = 7
+# storage_encrypted       = true   # false so se a conta do lab bloquear KMS
