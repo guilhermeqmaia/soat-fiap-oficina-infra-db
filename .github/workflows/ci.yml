@@ -1,0 +1,128 @@
+name: CI
+
+# fmt/validate em todo PR/push + `terraform plan` comentado no PR quando ha
+# credenciais. O diretorio do Terraform e detectado automaticamente (var
+# TF_DIR ou o primeiro diretorio com arquivos .tf) — se o codigo ainda nao
+# existe (US-F3-04 em andamento), o job passa com aviso.
+
+on:
+  pull_request:
+    branches: [main, homolog]
+  push:
+    branches: [main, homolog]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: fmt + validate
+    runs-on: ubuntu-latest
+    outputs:
+      tf_dir: ${{ steps.detect.outputs.tf_dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detectar diretorio do Terraform
+        id: detect
+        run: |
+          dir="${{ vars.TF_DIR }}"
+          if [ -z "$dir" ]; then
+            dir=$(find . -name '*.tf' -not -path './.terraform*' -not -path './.git*' \
+                  | xargs -r -n1 dirname | sort -u | head -1)
+          fi
+          if [ -z "$dir" ]; then
+            echo "::notice::Nenhum arquivo .tf no repo ainda (US-F3-04 em andamento) — nada a validar."
+          fi
+          echo "tf_dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.detect.outputs.tf_dir != ''
+        with:
+          terraform_version: 1.9.8
+
+      - name: terraform fmt -check
+        if: steps.detect.outputs.tf_dir != ''
+        run: terraform -chdir=${{ steps.detect.outputs.tf_dir }} fmt -check -diff
+
+      - name: terraform init (sem backend) + validate
+        if: steps.detect.outputs.tf_dir != ''
+        run: |
+          terraform -chdir=${{ steps.detect.outputs.tf_dir }} init -backend=false -input=false
+          terraform -chdir=${{ steps.detect.outputs.tf_dir }} validate
+
+  plan:
+    name: plan comentado no PR
+    if: github.event_name == 'pull_request' && needs.validate.outputs.tf_dir != ''
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_DIR: ${{ needs.validate.outputs.tf_dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ha credenciais AWS configuradas?
+        id: guard
+        run: |
+          if { [ -n "${{ secrets.AWS_ROLE_ARN }}" ] || [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; } && [ -n "${{ secrets.TF_STATE_BUCKET }}" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo "::notice::Sem credenciais AWS/TF_STATE_BUCKET — plan ignorado (fmt/validate ja cobriram o PR)."
+          fi
+
+      - name: Credenciais AWS
+        if: steps.guard.outputs.configured == 'true'
+        uses: ./.github/actions/aws-credentials
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          terraform_version: 1.9.8
+
+      - name: init com state remoto + plan
+        if: steps.guard.outputs.configured == 'true'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          printf 'terraform {\n  backend "s3" {}\n}\n' > backend_override.tf
+          terraform init -input=false \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=oficina-infra-db/homolog.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+          terraform plan -input=false -no-color | tee plan.txt
+        env:
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.DB_SUBNET_IDS }}
+
+      - name: Comentar o plan no PR
+        if: steps.guard.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync(process.env.TF_DIR + '/plan.txt', 'utf8');
+            const body = [
+              '### `terraform plan` — banco gerenciado (RDS)',
+              '<details><summary>Saida completa</summary>',
+              '',
+              '```',
+              plan.slice(-60000),
+              '```',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body,
+            });
