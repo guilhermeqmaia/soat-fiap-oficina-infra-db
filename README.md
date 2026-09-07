@@ -61,6 +61,26 @@ terraform init && terraform apply
 terraform fmt -check && terraform init -backend=false && terraform validate
 ```
 
+## CI/CD (US-F3-08)
+
+| Workflow | Quando | O que faz |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | PR e push | `fmt -check` + `validate`; **`terraform plan` comentado no PR** (quando há credenciais) |
+| [`cd.yml`](.github/workflows/cd.yml) | push em `homolog`/`main` | `apply` automático — `homolog` → homologação, `main` → produção |
+
+O diretório do Terraform é detectado automaticamente (ou fixado pela var
+`TF_DIR`); enquanto a US-F3-04 não entrega os `.tf`, os jobs passam com aviso.
+State remoto: S3 (`TF_STATE_BUCKET`), chave `oficina-infra-db/<env>.tfstate`.
+
+**Secrets**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+(Academy — renovar por sessão), `TF_STATE_BUCKET` (ou `AWS_ROLE_ARN` p/ OIDC).
+**Vars** (opcionais, viram `TF_VAR_*`): `LAB_ROLE_ARN`, `VPC_ID` e
+`DB_SUBNET_IDS` (outputs do repo infra-k8s/cluster), `TF_DIR`, `AWS_REGION`.
+
+**Deploy ativo:** endpoint do RDS = output do apply (summary do run de CD;
+o secret de conexão vai para o Secrets Manager, nunca para o log).
+<!-- atualizar com o link do run após o primeiro apply -->
+
 ## Documentação
 
 - [docs/user-stories/](docs/user-stories/) — US-F3-04

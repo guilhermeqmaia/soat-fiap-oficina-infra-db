@@ -1,0 +1,107 @@
+name: CD - Terraform apply
+
+# Deploy automatico do banco gerenciado: push em `homolog` -> homologacao,
+# push em `main` -> producao. State remoto em S3 (TF_STATE_BUCKET).
+
+on:
+  push:
+    branches: [main, homolog]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Acao do Terraform
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.map.outputs.env_name }}
+      tf_env: ${{ steps.map.outputs.tf_env }}
+    steps:
+      - id: map
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo 'env_name=production' >> "$GITHUB_OUTPUT"
+            echo 'tf_env=prod' >> "$GITHUB_OUTPUT"
+          else
+            echo 'env_name=homolog' >> "$GITHUB_OUTPUT"
+            echo 'tf_env=homolog' >> "$GITHUB_OUTPUT"
+          fi
+
+  apply:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.env_name }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_ENV: ${{ needs.resolve.outputs.tf_env }}
+      TF_ACTION: ${{ inputs.action || 'apply' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detectar diretorio do Terraform + credenciais
+        id: guard
+        run: |
+          dir="${{ vars.TF_DIR }}"
+          if [ -z "$dir" ]; then
+            dir=$(find . -name '*.tf' -not -path './.terraform*' -not -path './.git*' \
+                  | xargs -r -n1 dirname | sort -u | head -1)
+          fi
+          echo "tf_dir=$dir" >> "$GITHUB_OUTPUT"
+          ok=true
+          [ -n "$dir" ] || ok=false
+          { [ -n "${{ secrets.AWS_ROLE_ARN }}" ] || [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; } || ok=false
+          [ -n "${{ secrets.TF_STATE_BUCKET }}" ] || ok=false
+          echo "configured=$ok" >> "$GITHUB_OUTPUT"
+          [ "$ok" = true ] || echo "::warning::Apply IGNORADO — sem Terraform no repo ou sem credenciais (README secao CI/CD)."
+
+      - name: Credenciais AWS
+        if: steps.guard.outputs.configured == 'true'
+        uses: ./.github/actions/aws-credentials
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.guard.outputs.configured == 'true'
+        with:
+          terraform_version: 1.9.8
+
+      - name: terraform ${{ env.TF_ACTION }} (${{ env.TF_ENV }})
+        if: steps.guard.outputs.configured == 'true'
+        working-directory: ${{ steps.guard.outputs.tf_dir }}
+        run: |
+          printf 'terraform {\n  backend "s3" {}\n}\n' > backend_override.tf
+          terraform init -input=false \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=oficina-infra-db/${TF_ENV}.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+          case "$TF_ACTION" in
+            plan)    terraform plan -input=false ;;
+            apply)   terraform apply -input=false -auto-approve ;;
+            destroy) terraform destroy -input=false -auto-approve ;;
+          esac
+        env:
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.DB_SUBNET_IDS }}
+
+      - name: Outputs
+        if: steps.guard.outputs.configured == 'true' && env.TF_ACTION == 'apply'
+        working-directory: ${{ steps.guard.outputs.tf_dir }}
+        run: terraform output >> "$GITHUB_STEP_SUMMARY" || true
