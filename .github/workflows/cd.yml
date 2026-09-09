@@ -85,21 +85,25 @@ jobs:
         if: steps.guard.outputs.configured == 'true'
         working-directory: ${{ steps.guard.outputs.tf_dir }}
         run: |
-          printf 'terraform {\n  backend "s3" {}\n}\n' > backend_override.tf
           terraform init -input=false \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="key=oficina-infra-db/${TF_ENV}.tfstate" \
             -backend-config="region=${AWS_REGION}" \
-            -backend-config="encrypt=true"
+            -backend-config="encrypt=true" \
+            ${TF_LOCK_TABLE:+-backend-config="dynamodb_table=$TF_LOCK_TABLE"}
           case "$TF_ACTION" in
             plan)    terraform plan -input=false ;;
             apply)   terraform apply -input=false -auto-approve ;;
             destroy) terraform destroy -input=false -auto-approve ;;
           esac
         env:
+          TF_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+          TF_VAR_environment: ${{ env.TF_ENV }}
           TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
           TF_VAR_vpc_id: ${{ vars.VPC_ID }}
           TF_VAR_subnet_ids: ${{ vars.DB_SUBNET_IDS }}
+          TF_VAR_allowed_security_group_ids: ${{ vars.DB_ALLOWED_SG_IDS }}
+          TF_VAR_allowed_cidr_blocks: ${{ vars.DB_ALLOWED_CIDRS }}
 
       - name: Outputs
         if: steps.guard.outputs.configured == 'true' && env.TF_ACTION == 'apply'

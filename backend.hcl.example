@@ -1,0 +1,15 @@
+# Backend S3 — config parcial (US-F3-04).
+# Copie para backend.hcl (gitignored) e preencha com os recursos de remote
+# state criados uma unica vez no bootstrap (ver docs/AWS_ACADEMY_SETUP.md).
+#
+#   cp backend.hcl.example backend.hcl
+#   terraform init -backend-config=backend.hcl
+#
+# No CI/CD estes valores vem dos secrets TF_STATE_BUCKET / TF_STATE_LOCK_TABLE
+# e a `key` e definida por ambiente pelo workflow.
+
+bucket         = "oficina-mecanica-tfstate-SEUCONTA"
+key            = "oficina-infra-db/homolog.tfstate"
+region         = "us-east-1"
+dynamodb_table = "oficina-mecanica-tf-locks"
+encrypt        = true
