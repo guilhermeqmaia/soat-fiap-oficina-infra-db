@@ -17,6 +17,29 @@ a justificativa da escolha do banco e o modelo ER são a
 [US-F3-DOC-04](docs/user-stories/f3-doc-04-justificativa-banco-er.md).
 Passo a passo para rodar no AWS Academy: **[docs/AWS_ACADEMY_SETUP.md](docs/AWS_ACADEMY_SETUP.md)**.
 
+## Onde este repositório entra
+
+```mermaid
+flowchart LR
+    C["Cliente / Staff"] --> GW["API Gateway<br/>(repo 2)"]
+    GW -->|POST /auth| L["Lambda de CPF<br/>(repo 1)"]
+    GW -->|VPC Link| APP["Aplicação NestJS<br/>(repo 4)"]
+    APP --> DB[("**RDS PostgreSQL**<br/>(este repo)")]
+    L --> DB
+    style DB fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+```
+
+**Papel deste repositório:** banco gerenciado **RDS PostgreSQL Multi-AZ**, em
+subnets privadas da VPC, com o segredo de conexão no Secrets Manager —
+consumido pela aplicação (repo 4) e pela Lambda de autenticação (repo 1).
+
+| Repositório | Papel |
+|---|---|
+| [1 · auth-lambda](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda) | emite o JWT (CPF) e valida no gateway |
+| [2 · infra-k8s](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s) | API Gateway, cluster EKS e observabilidade |
+| **3 · este repo** | **RDS PostgreSQL gerenciado** |
+| [4 · mecanica-app](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) | API NestJS, manifestos K8s e documentação |
+
 ## Por que PostgreSQL gerenciado (RDS)
 
 - Mantém o **mesmo dialeto e migrations** (Prisma) das Fases 1–2 — zero
