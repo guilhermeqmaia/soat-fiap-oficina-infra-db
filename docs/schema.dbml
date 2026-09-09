@@ -186,10 +186,13 @@ Table ordem_de_servico_audit_log {
   }
 }
 
+// cliente_id e ordem_de_servico_id sao referencias LOGICAS (sem FK fisica):
+// a notificacao e um registro imutavel de envio, desacoplado do ciclo de vida
+// de cliente/OS. Ver docs/arquitetura/banco-de-dados.md > "Relacionamentos".
 Table notificacao {
   id uuid [pk, default: `uuid_generate_v4()`]
-  cliente_id uuid [not null]
-  ordem_de_servico_id uuid
+  cliente_id uuid [not null, note: 'Referencia logica a cliente.id (sem FK)']
+  ordem_de_servico_id uuid [note: 'Referencia logica a ordem_de_servico.id (sem FK)']
   tipo TipoNotificacao [not null]
   canal CanalNotificacao [not null]
   destinatario varchar [not null]

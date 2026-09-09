@@ -12,7 +12,9 @@ solução.
 | 3 | **soat-fiap-oficina-infra-db** (este) | Terraform do banco gerenciado (RDS PostgreSQL) |
 | 4 | [soat-fiap-oficina-mecanica-app](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) | Aplicação NestJS + manifestos K8s + docs |
 
-Implementa a [US-F3-04](docs/user-stories/f3-04-terraform-banco-gerenciado.md).
+Implementa a [US-F3-04](docs/user-stories/f3-04-terraform-banco-gerenciado.md);
+a justificativa da escolha do banco e o modelo ER são a
+[US-F3-DOC-04](docs/user-stories/f3-doc-04-justificativa-banco-er.md).
 Passo a passo para rodar no AWS Academy: **[docs/AWS_ACADEMY_SETUP.md](docs/AWS_ACADEMY_SETUP.md)**.
 
 ## Por que PostgreSQL gerenciado (RDS)
@@ -21,8 +23,11 @@ Passo a passo para rodar no AWS Academy: **[docs/AWS_ACADEMY_SETUP.md](docs/AWS_
   reescrita na aplicação.
 - ACID para as transações do domínio (ordens de serviço, reservas de estoque).
 - Multi-AZ com failover automático, backups e patches gerenciados pela AWS.
-- Modelo ER completo: [docs/schema.dbml](docs/schema.dbml) (importável no
-  [dbdiagram.io](https://dbdiagram.io)).
+- **Justificativa formal** (comparativo com DynamoDB, MySQL, Postgres
+  auto-hospedado e Aurora), **diagrama ER**, relacionamentos, constraints e
+  índices: [docs/arquitetura/banco-de-dados.md](docs/arquitetura/banco-de-dados.md)
+  (US-F3-DOC-04). Fonte do modelo: [docs/schema.dbml](docs/schema.dbml)
+  (importável no [dbdiagram.io](https://dbdiagram.io)).
 
 ## Arquitetura
 
@@ -192,7 +197,8 @@ terraform fmt -check && terraform init -backend=false && terraform validate
 ## Documentação
 
 - [docs/AWS_ACADEMY_SETUP.md](docs/AWS_ACADEMY_SETUP.md) — runbook do AWS Academy + pipeline
-- [docs/user-stories/](docs/user-stories/) — US-F3-04
+- [docs/user-stories/](docs/user-stories/) — US-F3-04, US-F3-DOC-04
 - [docs/qa-plans/QA_PLAN_US-F3-04.md](docs/qa-plans/QA_PLAN_US-F3-04.md) — plano de QA
-- [docs/schema.dbml](docs/schema.dbml) — modelo ER completo do domínio
+- [docs/arquitetura/banco-de-dados.md](docs/arquitetura/banco-de-dados.md) — justificativa da escolha do banco, diagrama ER, relacionamentos, consistência e índices
+- [docs/schema.dbml](docs/schema.dbml) — modelo ER completo do domínio (fonte canônica do [diagrama](docs/arquitetura/er-diagram.png))
 - [docs/tech-challenges/fase-3-tech-challenge.pdf](docs/tech-challenges/fase-3-tech-challenge.pdf) — enunciado
