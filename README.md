@@ -1,5 +1,7 @@
 # soat-fiap-oficina-infra-db
 
+[![CI](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/ci.yml) [![CD](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/cd.yml)
+
 Terraform do **banco de dados gerenciado** do Sistema da Oficina Mecânica
 (Tech Challenge FIAP — Fase 3): **Amazon RDS for PostgreSQL** Multi-AZ, com
 subnet group, security group e segredo de conexão. Repositório **3/4** da
