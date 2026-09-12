@@ -102,8 +102,11 @@ jobs:
           TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
           TF_VAR_vpc_id: ${{ vars.VPC_ID }}
           TF_VAR_subnet_ids: ${{ vars.DB_SUBNET_IDS }}
-          TF_VAR_allowed_security_group_ids: ${{ vars.DB_ALLOWED_SG_IDS }}
-          TF_VAR_allowed_cidr_blocks: ${{ vars.DB_ALLOWED_CIDRS }}
+          TF_VAR_allowed_security_group_ids: ${{ vars.DB_ALLOWED_SG_IDS || '[]' }}
+          TF_VAR_allowed_cidr_blocks: ${{ vars.DB_ALLOWED_CIDRS || '[]' }}
+          # Plano Free da AWS limita a retencao de backup (FreeTierRestrictionError
+          # acima de 1 dia); em conta paga fica o default de 7 dias do variables.tf.
+          TF_VAR_backup_retention_period: ${{ vars.DB_BACKUP_RETENTION_DAYS || '7' }}
 
       - name: Outputs
         if: steps.guard.outputs.configured == 'true' && env.TF_ACTION == 'apply'
