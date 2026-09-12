@@ -204,8 +204,9 @@ lock opcional em DynamoDB (`TF_STATE_LOCK_TABLE`).
 |---|---|
 | `VPC_ID` | `vpc-...` do cluster EKS (repo 2) |
 | `DB_SUBNET_IDS` | JSON: `["subnet-aaa","subnet-bbb"]` (subnets privadas) |
-| `DB_ALLOWED_SG_IDS` | JSON: `["sg-eks-nodes","sg-lambda-auth"]` |
+| `DB_ALLOWED_SG_IDS` | (opcional) JSON: `["sg-eks-nodes","sg-lambda-auth"]`; vazio ⇒ `[]` |
 | `DB_ALLOWED_CIDRS` | (opcional) JSON: `["10.0.0.0/16"]` |
+| `DB_BACKUP_RETENTION_DAYS` | (opcional) default 7; **plano Free da AWS só aceita 1** (`FreeTierRestrictionError`) |
 | `LAB_ROLE_ARN` | (opcional) ARN da LabRole, só se ligar Enhanced Monitoring |
 | `AWS_REGION`, `TF_DIR` | (opcionais) região / diretório do Terraform |
 
