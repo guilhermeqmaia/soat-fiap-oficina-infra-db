@@ -13,7 +13,7 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-rds"
-  description = "Acesso ao RDS PostgreSQL — apenas nodes do EKS e a Lambda de auth, dentro da VPC. Egress: usa o allow-all de saida que a AWS cria por default na SG."
+  description = "Acesso ao RDS PostgreSQL - apenas nodes do EKS e a Lambda de auth, dentro da VPC. Egress: allow-all default da SG."
   vpc_id      = var.vpc_id
 
   tags = {
