@@ -12,7 +12,7 @@ resource "random_password" "db" {
 
 resource "aws_secretsmanager_secret" "db" {
   name        = local.secret_name
-  description = "Credenciais de conexao do RDS PostgreSQL (${var.environment}) — US-F3-04."
+  description = "Credenciais de conexao do RDS PostgreSQL (${var.environment}) - US-F3-04."
 
   # Lab: permite recriar o secret no mesmo nome sem esperar a janela de
   # recuperacao de 7-30 dias. Em prod real, subir para >= 7.
