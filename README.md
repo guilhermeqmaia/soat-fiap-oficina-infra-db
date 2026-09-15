@@ -1,5 +1,7 @@
 # soat-fiap-oficina-infra-db
 
+**Deploy ativo (desde 15/09/2026):** RDS `oficina-mecanica-prod` em subnets privadas — sem endpoint público por desenho; consumido pela aplicação em `https://3jpje9so5m.execute-api.us-east-1.amazonaws.com` e pela Lambda de auth. Ambiente efêmero (ADR-0008 do repo da app).
+
 [![CI](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/ci.yml) [![CD](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-db/actions/workflows/cd.yml)
 
 Terraform do **banco de dados gerenciado** do Sistema da Oficina Mecânica
