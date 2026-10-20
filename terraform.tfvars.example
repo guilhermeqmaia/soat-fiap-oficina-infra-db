@@ -21,3 +21,13 @@ allowed_security_group_ids = ["sg-0123456789abcdef0", "sg-0fedcba9876543210"]
 # multi_az                = true
 # backup_retention_period = 7
 # storage_encrypted       = true   # false so se a conta do lab bloquear KMS
+
+# ─── Fase 4 (US-F4-03) ─────────────────────────────────────────────────────────
+# Bancos/usuarios exclusivos por servico na mesma instancia (o OS Service usa db_name/db_username).
+service_databases = {
+  billing = { db_name = "oficina_billing", username = "billing" }
+}
+# Tabela DynamoDB do Execucao Service ("" desliga).
+dynamodb_table_name = "oficina-execucao"
+# Conta propria: role dos nodes para a policy do DynamoDB (vazio no Academy).
+node_role_name = "oficina-mecanica-eks-node-role"

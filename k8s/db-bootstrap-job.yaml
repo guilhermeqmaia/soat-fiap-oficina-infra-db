@@ -1,0 +1,44 @@
+# US-F4-03 — cria o banco e o usuario EXCLUSIVO de cada servico dentro do RDS
+# (privado na VPC: o Terraform do CI nao o alcanca; o Job roda no EKS).
+# Aplicado por scripts/db-bootstrap.sh, que antes sincroniza os secrets:
+#   oficina-db            -> credenciais master (DATABASE_URL do RDS)
+#   oficina-<svc>-db      -> DB_NAME/DB_USER/DB_PASSWORD do servico (Secrets Manager)
+# Idempotente: CREATE ROLE/DATABASE so se nao existirem; grants reaplicados.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: oficina-db-bootstrap
+  namespace: oficina
+  labels: { app.kubernetes.io/part-of: oficina-mecanica, app.kubernetes.io/component: db-bootstrap }
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, runAsUser: 70 } # uid do usuario postgres da imagem alpine
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          env:
+            - { name: MASTER_URL, valueFrom: { secretKeyRef: { name: oficina-db, key: DATABASE_URL } } }
+            - { name: SERVICES, value: "__SERVICES__" } # "billing" (lista separada por espaco), preenchido pelo script
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              for svc in $SERVICES; do
+                eval "DB=\$DB_NAME_$svc; USR=\$DB_USER_$svc; PWD=\$DB_PASSWORD_$svc"
+                echo "== $svc: banco $DB / usuario $USR"
+                psql "$MASTER_URL" -v ON_ERROR_STOP=1 -v usr="$USR" -v pwd="$PWD" -v db="$DB" <<'SQL'
+                SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'usr', :'pwd') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'usr') \gexec
+                SELECT format('ALTER ROLE %I PASSWORD %L', :'usr', :'pwd') \gexec
+                SELECT format('CREATE DATABASE %I OWNER %I', :'db', :'usr') WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db') \gexec
+                -- isolamento: o usuario do servico NAO conecta nos outros bancos
+                SELECT format('REVOKE CONNECT ON DATABASE %I FROM %I', datname, :'usr') FROM pg_database WHERE datname NOT IN (:'db', 'template0', 'template1', 'rdsadmin', 'postgres') \gexec
+                SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', :'db') \gexec
+              SQL
+              done
+              echo "bootstrap concluido"
+          envFrom:
+            - secretRef: { name: oficina-services-db-bootstrap } # DB_NAME_<svc>/DB_USER_<svc>/DB_PASSWORD_<svc>
