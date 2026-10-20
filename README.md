@@ -14,7 +14,7 @@ solução.
 | 1 | [soat-fiap-oficina-auth-lambda](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda) | Function serverless de autenticação por CPF |
 | 2 | [soat-fiap-oficina-infra-k8s](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s) | Terraform do API Gateway + cluster EKS |
 | 3 | **soat-fiap-oficina-infra-db** (este) | Terraform do banco gerenciado (RDS PostgreSQL) |
-| 4 | [soat-fiap-oficina-mecanica-app](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) | Aplicação NestJS + manifestos K8s + docs |
+| 4 | [soat-fiap-oficina-os-service](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service) | Aplicação NestJS + manifestos K8s + docs |
 
 Implementa a [US-F3-04](docs/user-stories/f3-04-terraform-banco-gerenciado.md);
 a justificativa da escolha do banco e o modelo ER são a
@@ -42,7 +42,7 @@ consumido pela aplicação (repo 4) e pela Lambda de autenticação (repo 1).
 | [1 · auth-lambda](https://github.com/guilhermeqmaia/soat-fiap-oficina-auth-lambda) | emite o JWT (CPF) e valida no gateway |
 | [2 · infra-k8s](https://github.com/guilhermeqmaia/soat-fiap-oficina-infra-k8s) | API Gateway, cluster EKS e observabilidade |
 | **3 · este repo** | **RDS PostgreSQL gerenciado** |
-| [4 · mecanica-app](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app) | API NestJS, manifestos K8s e documentação |
+| [4 · os-service](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service) | API NestJS, manifestos K8s e documentação |
 
 ## Por que PostgreSQL gerenciado (RDS)
 
@@ -115,13 +115,13 @@ expõem só endpoint e ARN/nome do segredo.
 
 ## Fase 4 — bancos por serviço (US-F4-03)
 
-Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por credenciais, não por convenção ([RFC-0004](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app/blob/main/docs/arquitetura/rfcs/RFC-0004-decomposicao-em-microsservicos.md), decisão D10 do plano: **uma instância RDS, bancos e usuários separados**).
+Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por credenciais, não por convenção ([RFC-0004](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0004-decomposicao-em-microsservicos.md), decisão D10 do plano: **uma instância RDS, bancos e usuários separados**).
 
 | Serviço | Banco | Usuário | Secret (Secrets Manager) | Var no repo do serviço |
 |---|---|---|---|---|
 | OS Service | `oficina_mecanica` (principal) | `oficina` | `oficina-mecanica-<env>/database` | `DB_SECRET_ID` |
 | Billing | `oficina_billing` | `billing` | `oficina-mecanica-<env>/billing/database` | `DB_SECRET_ID` |
-| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
+| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
 
 **Como funciona.** O Terraform gera a senha e o secret de cada serviço (`service_databases`). Como o RDS é privado, o `CREATE DATABASE`/`CREATE ROLE` roda como **Job no EKS** (`k8s/db-bootstrap-job.yaml`), disparado por `scripts/db-bootstrap.sh` depois do apply — idempotente, revoga `CONNECT` do usuário do serviço em todos os outros bancos. O `aws-deploy-all.sh` do infra-k8s chama o script após RDS + cluster.
 
