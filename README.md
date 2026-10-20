@@ -113,6 +113,34 @@ via Secret do K8s (External Secrets, US-F3-06). A Lambda de auth lê o mesmo
 segredo. **Nenhuma senha vai para `outputs` nem para logs** — os outputs
 expõem só endpoint e ARN/nome do segredo.
 
+## Fase 4 — bancos por serviço (US-F4-03)
+
+Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por credenciais, não por convenção ([RFC-0004](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app/blob/main/docs/arquitetura/rfcs/RFC-0004-decomposicao-em-microsservicos.md), decisão D10 do plano: **uma instância RDS, bancos e usuários separados**).
+
+| Serviço | Banco | Usuário | Secret (Secrets Manager) | Var no repo do serviço |
+|---|---|---|---|---|
+| OS Service | `oficina_mecanica` (principal) | `oficina` | `oficina-mecanica-<env>/database` | `DB_SECRET_ID` |
+| Billing | `oficina_billing` | `billing` | `oficina-mecanica-<env>/billing/database` | `DB_SECRET_ID` |
+| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-mecanica-app/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
+
+**Como funciona.** O Terraform gera a senha e o secret de cada serviço (`service_databases`). Como o RDS é privado, o `CREATE DATABASE`/`CREATE ROLE` roda como **Job no EKS** (`k8s/db-bootstrap-job.yaml`), disparado por `scripts/db-bootstrap.sh` depois do apply — idempotente, revoga `CONNECT` do usuário do serviço em todos os outros bancos. O `aws-deploy-all.sh` do infra-k8s chama o script após RDS + cluster.
+
+```bash
+terraform apply                      # secrets + DynamoDB (node_role_name = policy na role dos nodes)
+scripts/db-bootstrap.sh --env prod   # bancos/usuarios dentro do RDS (precisa do cluster)
+```
+
+**Teste negativo (isolamento).** Com a `DATABASE_URL` do Billing, tentar o banco do OS Service:
+
+```bash
+psql "postgresql://billing:<senha>@<host>:5432/oficina_mecanica" -c 'select 1'
+# psql: error: FATAL:  permission denied for database "oficina_mecanica"
+```
+
+**DynamoDB.** Tabela single-table `oficina-execucao` (PK/SK, GSI1 fila por status, GSI2 por mecânico, TTL `ttl` para dedup, PITR, Streams `NEW_AND_OLD_IMAGES` para o outbox), `PAY_PER_REQUEST` (free tier). Policy `oficina-mecanica-<env>-dynamodb-execucao` anexada à role dos nodes quando `node_role_name` é informado; nome publicado em SSM `/oficina/dynamodb/execucao/table_name`.
+
+**Separar instâncias.** Se um serviço precisar de instância própria (carga, compliance), replique este módulo com outro `project_name` — a decisão de instância única é de custo, não de arquitetura.
+
 ## Como aplicar (local)
 
 Pré-requisito: credenciais do AWS Academy ativas (`aws configure` com

@@ -100,6 +100,7 @@ jobs:
           TF_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
           TF_VAR_environment: ${{ env.TF_ENV }}
           TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_node_role_name: ${{ vars.NODE_ROLE_NAME }}
           TF_VAR_vpc_id: ${{ vars.VPC_ID }}
           TF_VAR_subnet_ids: ${{ vars.DB_SUBNET_IDS }}
           TF_VAR_allowed_security_group_ids: ${{ vars.DB_ALLOWED_SG_IDS || '[]' }}

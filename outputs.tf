@@ -46,3 +46,31 @@ output "secret_name" {
   description = "Nome do secret no Secrets Manager (chave para o External Secrets do repo 4)."
   value       = aws_secretsmanager_secret.db.name
 }
+
+
+# ─── Fase 4 (US-F4-03) ────────────────────────────────────────────────────────
+
+output "service_secret_arns" {
+  description = "ARN do secret (DATABASE_URL exclusiva) de cada servico — var DB_SECRET_ID no repo do servico."
+  value       = { for k, s in aws_secretsmanager_secret.service : k => s.arn }
+}
+
+output "service_secret_names" {
+  description = "Nome do secret de cada servico no Secrets Manager."
+  value       = { for k, s in aws_secretsmanager_secret.service : k => s.name }
+}
+
+output "dynamodb_table_name" {
+  description = "Tabela DynamoDB do Execucao Service (var DYNAMODB_TABLE no repo do servico)."
+  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].name : null
+}
+
+output "dynamodb_table_arn" {
+  description = "ARN da tabela DynamoDB."
+  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].arn : null
+}
+
+output "dynamodb_stream_arn" {
+  description = "ARN do stream da tabela (outbox do Execucao Service)."
+  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].stream_arn : null
+}

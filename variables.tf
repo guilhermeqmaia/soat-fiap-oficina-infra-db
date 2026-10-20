@@ -161,3 +161,29 @@ variable "enable_enhanced_monitoring" {
   type        = bool
   default     = false
 }
+
+
+# ─── Fase 4 (US-F4-03): bancos por servico ───────────────────────────────────
+
+variable "service_databases" {
+  description = "Bancos logicos e usuarios EXCLUSIVOS por microsservico na mesma instancia RDS (RFC-0004/D10: uma instancia, varios bancos; cada servico so enxerga o seu). O OS Service continua no db_name/db_username principais."
+  type = map(object({
+    db_name  = string
+    username = string
+  }))
+  default = {
+    billing = { db_name = "oficina_billing", username = "billing" }
+  }
+}
+
+variable "dynamodb_table_name" {
+  description = "Tabela DynamoDB single-table do Execucao Service (RFC-0007). Vazio desliga."
+  type        = string
+  default     = "oficina-execucao"
+}
+
+variable "node_role_name" {
+  description = "Nome da IAM role dos nodes do EKS (conta propria). Quando informado, a policy de acesso a tabela DynamoDB e anexada a ela (sem IRSA os pods herdam a role). Vazio no AWS Academy (LabRole)."
+  type        = string
+  default     = ""
+}
