@@ -46,3 +46,50 @@ resource "aws_security_group_rule" "rds_ingress_cidr" {
   cidr_blocks       = var.allowed_cidr_blocks
   description       = "Postgres a partir dos CIDRs liberados"
 }
+
+
+# ─── Fase 4 (US-F4-03): security group por instancia de servico ──────────────
+# Cada instancia de servico (services.tf) tem o proprio SG, com as MESMAS
+# regras de ingresso da instancia principal (SGs e CIDRs liberados). O
+# isolamento e por instancia: um servico so conhece o host da propria
+# instancia (segredo) e o SG so aceita os nodes/Lambda liberados.
+
+resource "aws_security_group" "service" {
+  for_each = var.service_databases
+
+  name        = "${local.name_prefix}-${each.key}-rds"
+  description = "Acesso ao RDS PostgreSQL do servico ${each.key} - apenas nodes do EKS e a Lambda de auth, dentro da VPC. Egress: allow-all default da SG."
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name    = "${local.name_prefix}-${each.key}-rds"
+    Servico = each.key
+  }
+}
+
+# Ingresso a partir de security groups (nodes do EKS, Lambda de auth),
+# uma regra por (servico, SG).
+resource "aws_security_group_rule" "service_ingress_sg" {
+  for_each = local.service_sg_ingress
+
+  type                     = "ingress"
+  from_port                = var.db_port
+  to_port                  = var.db_port
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.service[each.value.service].id
+  source_security_group_id = each.value.source_sg
+  description              = "Postgres (${each.value.service}) a partir do security group ${each.value.source_sg}"
+}
+
+# Ingresso a partir de CIDRs (ex.: CIDR da VPC), quando informado.
+resource "aws_security_group_rule" "service_ingress_cidr" {
+  for_each = length(var.allowed_cidr_blocks) > 0 ? var.service_databases : {}
+
+  type              = "ingress"
+  from_port         = var.db_port
+  to_port           = var.db_port
+  protocol          = "tcp"
+  security_group_id = aws_security_group.service[each.key].id
+  cidr_blocks       = var.allowed_cidr_blocks
+  description       = "Postgres (${each.key}) a partir dos CIDRs liberados"
+}

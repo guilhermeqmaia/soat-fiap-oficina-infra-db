@@ -163,10 +163,10 @@ variable "enable_enhanced_monitoring" {
 }
 
 
-# ─── Fase 4 (US-F4-03): bancos por servico ───────────────────────────────────
+# ─── Fase 4 (US-F4-03): uma instancia RDS por servico ────────────────────────
 
 variable "service_databases" {
-  description = "Bancos logicos e usuarios EXCLUSIVOS por microsservico na mesma instancia RDS (RFC-0004/D10: uma instancia, varios bancos; cada servico so enxerga o seu). O OS Service continua no db_name/db_username principais."
+  description = "Instancias RDS EXCLUSIVAS por microsservico (decisao do time 04/11: uma instancia por servico, cada uma com o proprio security group e segredo; cada servico so conhece o proprio host). A chave vira sufixo do identifier (<prefixo>-<svc>). O OS Service continua na instancia principal (db_name/db_username)."
   type = map(object({
     db_name  = string
     username = string
