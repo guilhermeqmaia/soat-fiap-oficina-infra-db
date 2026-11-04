@@ -62,8 +62,10 @@ consumido pela aplicação (repo 4) e pela Lambda de autenticação (repo 1).
 flowchart LR
   subgraph VPC["VPC do repo 2 (us-east-1)"]
     subgraph priv["Subnets privadas"]
-      RDS[("RDS PostgreSQL 16<br/>Multi-AZ · gp3 · encrypted")]
+      RDS[("RDS PostgreSQL 16<br/>Multi-AZ · gp3 · encrypted<br/>(OS Service)")]
       SGRDS["SG oficina-mecanica-&lt;env&gt;-rds<br/>ingress tcp/5432"]
+      RDSSVC[("RDS por serviço (Fase 4)<br/>oficina-mecanica-&lt;env&gt;-&lt;svc&gt;")]
+      SGSVC["SG oficina-mecanica-&lt;env&gt;-&lt;svc&gt;-rds<br/>ingress tcp/5432"]
     end
     EKS["EKS nodes<br/>(app NestJS + Job migrations)"]
     LAMBDA["Lambda auth por CPF"]
@@ -71,6 +73,7 @@ flowchart LR
   SM["AWS Secrets Manager<br/>oficina-mecanica-&lt;env&gt;/database"]
 
   EKS -- "5432 (SG allow)" --> SGRDS --> RDS
+  EKS -- "5432 (SG allow)" --> SGSVC --> RDSSVC
   LAMBDA -- "5432 (SG allow)" --> SGRDS
   RDS -. senha/DATABASE_URL .-> SM
   SM -. "External Secrets (US-F3-06)" .-> EKS
@@ -93,6 +96,10 @@ informados (nodes do EKS + Lambda de auth).
 | `random_password.db` | — | Senha master (24 chars alfanuméricos), gerada no apply |
 | `aws_secretsmanager_secret.db` | `oficina-mecanica-<env>/database` | Segredo de conexão |
 | `aws_secretsmanager_secret_version.db` | — | Payload JSON com `DATABASE_URL` + campos de conveniência |
+| `aws_db_instance.service[svc]` | `oficina-mecanica-<env>-<svc>` | Instância RDS **própria** de cada serviço (`service_databases`), mesmos parâmetros da principal |
+| `aws_security_group.service[svc]` | `oficina-mecanica-<env>-<svc>-rds` | Firewall da instância do serviço (mesmas regras de ingresso da principal) |
+| `aws_security_group_rule.service_ingress_sg` / `service_ingress_cidr` | — | Ingresso tcp/5432 por SG / CIDR na instância do serviço |
+| `random_password.service[svc]` / `aws_secretsmanager_secret.service[svc]` | `oficina-mecanica-<env>/<svc>/database` | Senha master e segredo de conexão da instância do serviço |
 
 ## Contrato de saída (consumido pelos repos 1 e 4)
 
@@ -113,33 +120,29 @@ via Secret do K8s (External Secrets, US-F3-06). A Lambda de auth lê o mesmo
 segredo. **Nenhuma senha vai para `outputs` nem para logs** — os outputs
 expõem só endpoint e ARN/nome do segredo.
 
-## Fase 4 — bancos por serviço (US-F4-03)
+## Fase 4 — uma instância RDS por serviço (US-F4-03)
 
-Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por credenciais, não por convenção ([RFC-0004](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0004-decomposicao-em-microsservicos.md), decisão D10 do plano: **uma instância RDS, bancos e usuários separados**).
+Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por infraestrutura, não por convenção ([RFC-0004](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0004-decomposicao-em-microsservicos.md); decisão do time em 04/11: **uma instância RDS por serviço**, cada uma com o próprio security group e o próprio segredo — "um banco por serviço" sem ambiguidade).
 
-| Serviço | Banco | Usuário | Secret (Secrets Manager) | Var no repo do serviço |
-|---|---|---|---|---|
-| OS Service | `oficina_mecanica` (principal) | `oficina` | `oficina-mecanica-<env>/database` | `DB_SECRET_ID` |
-| Billing | `oficina_billing` | `billing` | `oficina-mecanica-<env>/billing/database` | `DB_SECRET_ID` |
-| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
+| Serviço | Instância RDS | Banco | Usuário | Secret (Secrets Manager) | Var no repo do serviço |
+|---|---|---|---|---|---|
+| OS Service | `oficina-mecanica-<env>` (principal) | `oficina_mecanica` | `oficina` | `oficina-mecanica-<env>/database` | `DB_SECRET_ID` |
+| Billing | `oficina-mecanica-<env>-billing` | `oficina_billing` | `billing` | `oficina-mecanica-<env>/billing/database` | `DB_SECRET_ID` |
+| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
 
-**Como funciona.** O Terraform gera a senha e o secret de cada serviço (`service_databases`). Como o RDS é privado, o `CREATE DATABASE`/`CREATE ROLE` roda como **Job no EKS** (`k8s/db-bootstrap-job.yaml`), disparado por `scripts/db-bootstrap.sh` depois do apply — idempotente, revoga `CONNECT` do usuário do serviço em todos os outros bancos. O `aws-deploy-all.sh` do infra-k8s chama o script após RDS + cluster.
-
-```bash
-terraform apply                      # secrets + DynamoDB (node_role_name = policy na role dos nodes)
-scripts/db-bootstrap.sh --env prod   # bancos/usuarios dentro do RDS (precisa do cluster)
-```
-
-**Teste negativo (isolamento).** Com a `DATABASE_URL` do Billing, tentar o banco do OS Service:
+**Como funciona.** Cada entrada de `service_databases` cria a **própria instância** (`aws_db_instance.service[svc]`, mesmos parâmetros da principal: engine, classe, storage, Multi-AZ, backups, janelas), um security group exclusivo com as mesmas regras de ingresso (nodes do EKS / Lambda / CIDRs liberados) e o segredo `oficina-mecanica-<env>/<svc>/database` com `DB_HOST`/`DATABASE_URL` apontando para o host daquela instância. Banco e usuário master nascem no `apply` do RDS — **não há bootstrap SQL nem Job no EKS**. A instância principal segue sendo a do OS Service (identifier, `oficina_mecanica`, `oficina` e secret principal inalterados — contrato do CD do os-service).
 
 ```bash
-psql "postgresql://billing:<senha>@<host>:5432/oficina_mecanica" -c 'select 1'
-# psql: error: FATAL:  permission denied for database "oficina_mecanica"
+terraform apply   # instancia principal + uma instancia por servico + secrets + DynamoDB
 ```
+
+**Isolamento.** Cada serviço só conhece o próprio host: o endpoint da instância de outro serviço não está no seu segredo e o security group daquela instância só aceita os nodes/Lambda liberados — não existe caminho para conectar cruzado, nem com credenciais vazadas de outro serviço. Não há "teste negativo" por `permission denied`: o acesso cruzado não chega a abrir conexão.
+
+**Custo.** Uma `db.t3.micro` a mais por serviço (hoje: Billing), com storage gp3 de 20 GiB; Multi-AZ segue `var.multi_az` (igual à principal), então em prod cada instância extra custa ~2× uma single-AZ. Ver [Custo estimado](#custo-estimado-us-east-1-on-demand).
 
 **DynamoDB.** Tabela single-table `oficina-execucao` (PK/SK, GSI1 fila por status, GSI2 por mecânico, TTL `ttl` para dedup, PITR, Streams `NEW_AND_OLD_IMAGES` para o outbox), `PAY_PER_REQUEST` (free tier). Policy `oficina-mecanica-<env>-dynamodb-execucao` anexada à role dos nodes quando `node_role_name` é informado; nome publicado em SSM `/oficina/dynamodb/execucao/table_name`.
 
-**Separar instâncias.** Se um serviço precisar de instância própria (carga, compliance), replique este módulo com outro `project_name` — a decisão de instância única é de custo, não de arquitetura.
+**Novo serviço com Postgres.** Adicione uma entrada em `service_databases` (`<svc> = { db_name, username }`) e aplique: a instância, o SG e o segredo nascem com o sufixo `<svc>`; o repo do serviço recebe `DB_SECRET_ID = oficina-mecanica-<env>/<svc>/database`.
 
 ## Como aplicar (local)
 
@@ -203,7 +206,8 @@ Principais opcionais (defaults em [`variables.tf`](variables.tf)):
 | Storage gp3 20 GiB | ~US$ 2,3/mês | ~US$ 4,6/mês (primary + standby) |
 | Backups (até 100% do storage) | incluso / ~US$ 0 | incluso / ~US$ 0 |
 | Secrets Manager (1 segredo) | ~US$ 0,40/mês | ~US$ 0,40/mês |
-| **Total aproximado** | **~US$ 15/mês** | **~US$ 30/mês** |
+| **Total aproximado (instância principal)** | **~US$ 15/mês** | **~US$ 30/mês** |
+| + por serviço em `service_databases` (instância própria, Fase 4) | +~US$ 15/mês cada | +~US$ 30/mês cada (Multi-AZ segue `multi_az`) |
 
 Sem tráfego entre AZs relevante para a carga do desafio. Valores de
 referência — o AWS Academy Learner Lab tem orçamento limitado: **rode

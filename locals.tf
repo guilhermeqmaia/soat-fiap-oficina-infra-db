@@ -18,4 +18,11 @@ locals {
 
   monitoring_interval = var.enable_enhanced_monitoring ? 60 : 0
   monitoring_role_arn = var.enable_enhanced_monitoring ? var.lab_role_arn : null
+
+  # Fase 4 (US-F4-03): produto (servico x SG liberado) para as regras de
+  # ingresso dos security groups das instancias por servico (network.tf).
+  service_sg_ingress = {
+    for pair in setproduct(keys(var.service_databases), var.allowed_security_group_ids) :
+    "${pair[0]}/${pair[1]}" => { service = pair[0], source_sg = pair[1] }
+  }
 }

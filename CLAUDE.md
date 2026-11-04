@@ -22,6 +22,16 @@ auth Lambda (repo 1), all inside the VPC provisioned by repo 2.
   Lambda read it; keep the key names stable.
 - DB password generated at apply time (`random_password`) → Secrets Manager.
   The tfstate contains it: never commit state (see `.gitignore`).
+- **Fase 4 (US-F4-03): one RDS instance per service** (team decision,
+  04/11). The main instance (`aws_db_instance.this`) stays the OS Service's —
+  never change its identifier, `oficina_mecanica`, user `oficina` or the main
+  secret (the os-service CD depends on that contract). Each entry of
+  `var.service_databases` creates its own instance (`<prefix>-<svc>`), its own
+  security group (same ingress rules as the main one) and its own secret
+  (`<prefix>/<svc>/database`, same keys, `DB_HOST` = that instance). A service
+  only knows its own host; there is no cross-service path. No SQL bootstrap
+  Job: RDS creates db/user on apply. Cost: one extra `db.t3.micro` per
+  service (Multi-AZ follows `var.multi_az`).
 
 ## AWS Academy constraints (always apply)
 

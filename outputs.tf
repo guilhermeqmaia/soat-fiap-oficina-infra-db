@@ -60,6 +60,21 @@ output "service_secret_names" {
   value       = { for k, s in aws_secretsmanager_secret.service : k => s.name }
 }
 
+output "service_db_addresses" {
+  description = "Host (sem porta) da instancia RDS propria de cada servico (svc => address)."
+  value       = { for k, db in aws_db_instance.service : k => db.address }
+}
+
+output "service_db_instance_ids" {
+  description = "Identificador da instancia RDS propria de cada servico (svc => id)."
+  value       = { for k, db in aws_db_instance.service : k => db.id }
+}
+
+output "service_db_security_group_ids" {
+  description = "Security group da instancia RDS de cada servico (svc => sg id) — referenciar ao liberar novos consumidores."
+  value       = { for k, sg in aws_security_group.service : k => sg.id }
+}
+
 output "dynamodb_table_name" {
   description = "Tabela DynamoDB do Execucao Service (var DYNAMODB_TABLE no repo do servico)."
   value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].name : null
