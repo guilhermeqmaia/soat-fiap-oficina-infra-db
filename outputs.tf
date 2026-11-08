@@ -75,17 +75,17 @@ output "service_db_security_group_ids" {
   value       = { for k, sg in aws_security_group.service : k => sg.id }
 }
 
-output "dynamodb_table_name" {
-  description = "Tabela DynamoDB do Execucao Service (var DYNAMODB_TABLE no repo do servico)."
-  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].name : null
+output "dynamodb_table_prefix" {
+  description = "Prefixo das tabelas do Execucao Service (DYNAMODB_TABLE_PREFIX no repo do servico)."
+  value       = var.dynamodb_enabled ? var.dynamodb_table_prefix : null
 }
 
-output "dynamodb_table_arn" {
-  description = "ARN da tabela DynamoDB."
-  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].arn : null
+output "dynamodb_table_names" {
+  description = "Nome de cada tabela DynamoDB do Execucao Service (base => nome completo)."
+  value       = { for k, t in aws_dynamodb_table.execucao_tabelas : k => t.name }
 }
 
-output "dynamodb_stream_arn" {
-  description = "ARN do stream da tabela (outbox do Execucao Service)."
-  value       = var.dynamodb_table_name != "" ? aws_dynamodb_table.execucao[0].stream_arn : null
+output "dynamodb_table_arns" {
+  description = "ARN de cada tabela DynamoDB do Execucao Service."
+  value       = { for k, t in aws_dynamodb_table.execucao_tabelas : k => t.arn }
 }

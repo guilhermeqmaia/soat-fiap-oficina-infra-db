@@ -128,19 +128,30 @@ Regra do enunciado: **nenhum serviço acessa o banco de outro**. Aplicada por in
 |---|---|---|---|---|---|
 | OS Service | `oficina-mecanica-<env>` (principal) | `oficina_mecanica` | `oficina` | `oficina-mecanica-<env>/database` | `DB_SECRET_ID` |
 | Billing | `oficina-mecanica-<env>-billing` | `oficina_billing` | `billing` | `oficina-mecanica-<env>/billing/database` | `DB_SECRET_ID` |
-| Execução | DynamoDB `oficina-execucao` ([RFC-0007](https://github.com/guilhermeqmaia/soat-fiap-oficina-os-service/blob/main/docs/arquitetura/rfcs/RFC-0007-banco-nosql.md)) | — | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE` |
+| Execução | DynamoDB `oficina-execucoes`, `oficina-servicos`, `oficina-produtos`, `oficina-movimentacoes_estoque` | — | — (IAM, role dos nodes) | — | `DYNAMODB_TABLE_PREFIX=oficina-` |
 
 **Como funciona.** Cada entrada de `service_databases` cria a **própria instância** (`aws_db_instance.service[svc]`, mesmos parâmetros da principal: engine, classe, storage, Multi-AZ, backups, janelas), um security group exclusivo com as mesmas regras de ingresso (nodes do EKS / Lambda / CIDRs liberados) e o segredo `oficina-mecanica-<env>/<svc>/database` com `DB_HOST`/`DATABASE_URL` apontando para o host daquela instância. Banco e usuário master nascem no `apply` do RDS — **não há bootstrap SQL nem Job no EKS**. A instância principal segue sendo a do OS Service (identifier, `oficina_mecanica`, `oficina` e secret principal inalterados — contrato do CD do os-service).
 
 ```bash
-terraform apply   # instancia principal + uma instancia por servico + secrets + DynamoDB
+terraform apply   # instancia principal + uma instancia por servico + secrets + tabelas DynamoDB
 ```
 
 **Isolamento.** Cada serviço só conhece o próprio host: o endpoint da instância de outro serviço não está no seu segredo e o security group daquela instância só aceita os nodes/Lambda liberados — não existe caminho para conectar cruzado, nem com credenciais vazadas de outro serviço. Não há "teste negativo" por `permission denied`: o acesso cruzado não chega a abrir conexão.
 
 **Custo.** Uma `db.t3.micro` a mais por serviço (hoje: Billing), com storage gp3 de 20 GiB; Multi-AZ segue `var.multi_az` (igual à principal), então em prod cada instância extra custa ~2× uma single-AZ. Ver [Custo estimado](#custo-estimado-us-east-1-on-demand).
 
-**DynamoDB.** Tabela single-table `oficina-execucao` (PK/SK, GSI1 fila por status, GSI2 por mecânico, TTL `ttl` para dedup, PITR, Streams `NEW_AND_OLD_IMAGES` para o outbox), `PAY_PER_REQUEST` (free tier). Policy `oficina-mecanica-<env>-dynamodb-execucao` anexada à role dos nodes quando `node_role_name` é informado; nome publicado em SSM `/oficina/dynamodb/execucao/table_name`.
+**DynamoDB.** Quatro tabelas do Execução Service (`<dynamodb_table_prefix>` + nome base; espelham `src/dynamodb/definicoes-tabelas.ts` do [execucao-service](https://github.com/engineercodeprojects/fase-04-soat-fiap-oficina-execucao-service)), todas `PAY_PER_REQUEST` (free tier), PITR e deletion protection em prod:
+
+| Tabela | Chave | GSIs |
+|---|---|---|
+| `execucoes` | `osId` | — |
+| `servicos` | `servicoId` | — |
+| `produtos` | `produtoId` | — |
+| `movimentacoes_estoque` | `movimentacaoId` | `produtoId-data-index` (`produtoId`+`data`), `osId-data-index` (`osId`+`data`) |
+
+Baixa/devolução de estoque são `TransactWriteItems` da aplicação (Update condicional em `produtos` + Put em `movimentacoes_estoque`). Policy `oficina-mecanica-<env>-dynamodb-execucao` (tabelas + índices) anexada à role dos nodes quando `node_role_name` é informado; prefixo publicado em SSM `/oficina/dynamodb/execucao/table_prefix`.
+
+> **Migração da single-table.** A antiga `oficina-execucao` (RFC-0007) e o SSM `/oficina/dynamodb/execucao/table_name` saem do state via bloco `removed` (**sem destruir**). Depois do apply, confira que estão vazios/sem uso e apague manualmente: `aws dynamodb update-table --table-name oficina-execucao --no-deletion-protection-enabled && aws dynamodb delete-table --table-name oficina-execucao`.
 
 **Novo serviço com Postgres.** Adicione uma entrada em `service_databases` (`<svc> = { db_name, username }`) e aplique: a instância, o SG e o segredo nascem com o sufixo `<svc>`; o repo do serviço recebe `DB_SECRET_ID = oficina-mecanica-<env>/<svc>/database`.
 
