@@ -140,7 +140,7 @@ terraform apply   # instancia principal + uma instancia por servico + secrets + 
 
 **Custo.** Uma `db.t3.micro` a mais por serviço (hoje: Billing), com storage gp3 de 20 GiB; Multi-AZ segue `var.multi_az` (igual à principal), então em prod cada instância extra custa ~2× uma single-AZ. Ver [Custo estimado](#custo-estimado-us-east-1-on-demand).
 
-**DynamoDB.** Quatro tabelas do Execução Service (`<dynamodb_table_prefix>` + nome base; espelham `src/dynamodb/definicoes-tabelas.ts` do [execucao-service](https://github.com/engineercodeprojects/fase-04-soat-fiap-oficina-execucao-service)), todas `PAY_PER_REQUEST` (free tier), PITR e deletion protection em prod:
+**DynamoDB.** Quatro tabelas do Execução Service (`<dynamodb_table_prefix>` + nome base; espelham `src/dynamodb/definicoes-tabelas.ts` do [execucao-service](https://github.com/guilhermeqmaia/soat-fiap-oficina-execucao-service)), todas `PAY_PER_REQUEST` (free tier), PITR e deletion protection em prod:
 
 | Tabela | Chave | GSIs |
 |---|---|---|
