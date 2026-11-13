@@ -176,10 +176,21 @@ variable "service_databases" {
   }
 }
 
-variable "dynamodb_table_name" {
-  description = "Tabela DynamoDB single-table do Execucao Service (RFC-0007). Vazio desliga."
+variable "dynamodb_enabled" {
+  description = "Cria as tabelas DynamoDB do Execucao Service (execucoes, servicos, produtos, movimentacoes_estoque)."
+  type        = bool
+  default     = true
+}
+
+variable "dynamodb_table_prefix" {
+  description = "Prefixo dos nomes das tabelas DynamoDB do Execucao Service — deve ser igual a DYNAMODB_TABLE_PREFIX do servico (k8s ConfigMap)."
   type        = string
-  default     = "oficina-execucao"
+  default     = "oficina-"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]*$", var.dynamodb_table_prefix))
+    error_message = "Use apenas letras, numeros, '_', '-' e '.' (regra de nomes do DynamoDB)."
+  }
 }
 
 variable "node_role_name" {
